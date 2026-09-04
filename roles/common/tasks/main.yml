@@ -81,3 +81,15 @@
     group: root
     mode: '0644'
   become: true
+
+- name: Set GRUB timeout and style to show menu
+  ansible.builtin.lineinfile:
+    path: /etc/default/grub
+    regexp: '^{{ item.key }}='
+    line: '{{ item.key }}={{ item.value }}'
+    state: present
+  loop:
+    - { key: 'GRUB_TIMEOUT', value: '5' }
+    - { key: 'GRUB_TIMEOUT_STYLE', value: 'menu' }
+  become: true
+  notify: Rebuild GRUB config

@@ -11,6 +11,7 @@
   roles:
     - { role: virtualization, tags: ["virtualization", "setup"] }
     - { role: vm-manager, tags: ["vm-manager", "setup"] }
+    - { role: vm-snapshot, tags: ["snapshot"] }
   
   post_tasks:
     - name: Display configuration status

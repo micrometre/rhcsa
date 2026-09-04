@@ -1,0 +1,104 @@
+---
+# VM Snapshot management tasks
+
+- name: Ensure snapshot directory exists
+  ansible.builtin.file:
+    path: "{{ snapshot_directory }}"
+    state: directory
+    mode: '0755'
+  become: true
+
+- name: Create VM snapshot
+  ansible.builtin.command:
+    cmd: >-
+      virsh snapshot-create-as
+      {{ vm_name }}
+      {{ snapshot_name | default(vm_name + '-' + ansible_date_time.epoch) }}
+      --description "{{ snapshot_description }}"
+      --atomic
+  register: snapshot_create
+  changed_when: snapshot_create.rc == 0
+  failed_when: false
+  when: snapshot_action == 'create'
+  become: true
+
+- name: Display snapshot creation result
+  ansible.builtin.debug:
+    msg: >-
+      Snapshot {{ snapshot_name | default(vm_name + '-' + ansible_date_time.epoch) }}
+      created for {{ vm_name }}
+  when: 
+    - snapshot_action == 'create'
+    - snapshot_create.rc == 0
+
+- name: List VM snapshots
+  ansible.builtin.command:
+    cmd: virsh snapshot-list {{ vm_name }} --tree
+  register: snapshot_list
+  changed_when: false
+  when: 
+    - snapshot_action == 'list'
+    - vm_name | length > 0
+  become: true
+
+- name: Fail if vm_name not provided for list action
+  ansible.builtin.fail:
+    msg: "VM_NAME is required for snapshot list. Use 'make list_all_snapshots' to list all VM snapshots."
+  when: 
+    - snapshot_action == 'list'
+    - vm_name | length == 0
+
+- name: Display snapshot list
+  ansible.builtin.debug:
+    msg: "{{ snapshot_list.stdout_lines }}"
+  when: snapshot_action == 'list'
+
+- name: Delete VM snapshot
+  ansible.builtin.command:
+    cmd: virsh snapshot-delete {{ vm_name }} --snapshotname {{ snapshot_name }}
+  register: snapshot_delete
+  changed_when: snapshot_delete.rc == 0
+  failed_when: false
+  when: 
+    - snapshot_action == 'delete'
+    - snapshot_name | length > 0
+  become: true
+
+- name: Display snapshot deletion result
+  ansible.builtin.debug:
+    msg: "Snapshot {{ snapshot_name }} deleted from {{ vm_name }}"
+  when: 
+    - snapshot_action == 'delete'
+    - snapshot_delete.rc == 0
+
+- name: Restore VM snapshot
+  ansible.builtin.command:
+    cmd: virsh snapshot-revert {{ vm_name }} --snapshotname {{ snapshot_name }}
+  register: snapshot_restore
+  changed_when: snapshot_restore.rc == 0
+  failed_when: false
+  when: 
+    - snapshot_action == 'restore'
+    - snapshot_name | length > 0
+  become: true
+
+- name: Display snapshot restore result
+  ansible.builtin.debug:
+    msg: "VM {{ vm_name }} restored to snapshot {{ snapshot_name }}"
+  when: 
+    - snapshot_action == 'restore'
+    - snapshot_restore.rc == 0
+
+- name: Get current snapshot
+  ansible.builtin.command:
+    cmd: virsh snapshot-current {{ vm_name }}
+  register: current_snapshot
+  changed_when: false
+  failed_when: false
+  when: snapshot_action == 'current'
+  become: true
+
+- name: Display current snapshot
+  ansible.builtin.debug:
+    msg: "Current snapshot for {{ vm_name }}: {{ current_snapshot.stdout if current_snapshot.rc == 0 else 'No current snapshot' }}"
+  when: snapshot_action == 'current'

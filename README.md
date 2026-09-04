@@ -50,16 +50,16 @@ The lab consists of two VMs connected via libvirt's default NAT network (192.168
 
 ## Virtual Machines
 
-| VM Name       | Operating System         | Installation Method | VCPUs | RAM   | Disk  | Purpose                          |
-|---------------|--------------------------|---------------------|-------|-------|-------|----------------------------------|
-| `rhcsa-node1` | AlmaLinux 9 GenericCloud | Cloud-Init Import   | 2     | 2048M | 20G   | Primary exam practice target     |
-| `repo-srv`    | AlmaLinux 9 Minimal ISO  | ISO Installation    | 1     | 1024M | 25G   | NFS server + DNF repository      |
+| VM Name       | Operating System         | Installation Method | VCPUs | RAM   | Disk  | Static IP       | Purpose                          |
+|---------------|--------------------------|---------------------|-------|-------|-------|-----------------|----------------------------------|
+| `rhcsa-node1` | AlmaLinux 9 GenericCloud | Cloud-Init Import   | 2     | 2048M | 20G   | 192.168.122.100 | Primary exam practice target     |
+| `repo-srv`    | AlmaLinux 9 Minimal ISO  | ISO Installation    | 1     | 1024M | 25G   | 192.168.122.101 | NFS server + DNF repository      |
 
 **Note:**
-- VMs obtain dynamic IPs from the libvirt default network (192.168.122.0/24)
-- The `inventory/hosts.yml` file is auto-generated after VM creation with actual IPs
+- VMs are configured with static IP addresses via cloud-init
 - Both VMs are configured with `root` password set to `redhat` for fallback access
 - SSH key-based authentication is configured for passwordless access
+- The `inventory/hosts.yml` file should be updated with these static IPs
 
 ## Quick Start
 
@@ -85,11 +85,11 @@ make create_rhcsa_node1    # Creates only rhcsa-node1
 make create_repo_srv       # Creates only repo-srv
 ```
 
-3. **Generate inventory** with actual VM IPs (VMs must be running):
+3. **Update inventory** with static IPs (VMs are configured with static IPs):
 ```bash
-# Check VM status and obtain IPs
-make vm_status
-# Update inventory/hosts.yml with the actual IPs shown
+# The inventory/hosts.yml should be configured with:
+# rhcsa-node1: 192.168.122.100
+# repo-srv: 192.168.122.101
 ```
 
 4. **Provision users** on running VMs (creates sysadmin user with sudo access):
@@ -114,20 +114,51 @@ make dnf_repo_setup            # Configure DNF repository on repo-srv
 make autofs_setup              # Configure autofs on rhcsa-node1
 ```
 
+### VM Snapshot Commands
+
+Snapshots are invaluable for RHCSA practice - they allow you to save a clean state before attempting complex tasks and quickly revert if something goes wrong.
+
+```bash
+# Create a snapshot (VM_NAME required, SNAPSHOT_NAME optional)
+make snapshot_create VM_NAME=rhcsa-node1
+make snapshot_create VM_NAME=rhcsa-node1 SNAPSHOT_NAME=before-lvm-lab
+
+# List snapshots for a specific VM
+make snapshot_list VM_NAME=rhcsa-node1
+make list_snapshot VM_NAME=rhcsa-node1  # Alias
+
+# List all snapshots for all VMs (simpler option)
+make list_all_snapshots
+
+# Show current snapshot
+make snapshot_current VM_NAME=rhcsa-node1
+
+# Restore a snapshot (VM_NAME and SNAPSHOT_NAME required)
+make snapshot_restore VM_NAME=rhcsa-node1 SNAPSHOT_NAME=before-lvm-lab
+
+# Delete a snapshot (VM_NAME and SNAPSHOT_NAME required)
+make snapshot_delete VM_NAME=rhcsa-node1 SNAPSHOT_NAME=before-lvm-lab
+```
+
+**Best Practices for RHCSA Study:**
+- Create a snapshot before starting each major lab (LVM, SELinux, NFS, etc.)
+- Name snapshots descriptively (e.g., `before-selinux-lab`, `after-user-config`)
+- Keep snapshots for reference but delete old ones to save disk space
+- Use snapshots to practice troubleshooting - break something, then restore and try again
+
 ## Accessing the VMs
 
 ### SSH Access
 
-After VM creation, obtain the actual IP addresses:
-```bash
-virsh domifaddr rhcsa-node1
-virsh domifaddr repo-srv
-```
+VMs are configured with static IP addresses for consistent access:
 
-Then update `inventory/hosts.yml` with the actual IPs and access via SSH:
 ```bash
-ssh root@<rhcsa-node1-ip>
-ssh almalinux@<rhcsa-node1-ip>
+# Access rhcsa-node1 (192.168.122.100)
+ssh root@192.168.122.100
+ssh almalinux@192.168.122.100
+
+# Access repo-srv (192.168.122.101)
+ssh root@192.168.122.101
 ```
 
 **Fallback Access:**
@@ -138,7 +169,8 @@ ssh almalinux@<rhcsa-node1-ip>
 **After User Provisioning:**
 Once you run `make create_users`, you can also login via the `sysadmin` administrator user:
 ```bash
-ssh sysadmin@<vm-ip>
+ssh sysadmin@192.168.122.100
+ssh sysadmin@192.168.122.101
 ```
 
 ## Repository Structure
@@ -148,7 +180,7 @@ sysadmin/
 ├── Makefile                          # Entry point for all automation commands
 ├── ansible.cfg                       # Ansible configuration
 ├── inventory/
-│   └── hosts.yml                     # Dynamic inventory with VM connection details
+│   └── hosts.yml                     # Inventory with VM connection details (static IPs)
 ├── playbooks/
 │   ├── create_vms.yml                # Master playbook for VM creation
 │   ├── create_rhcsa_node1.yml        # Playbook for rhcsa-node1 VM
@@ -157,7 +189,11 @@ sysadmin/
 ├── roles/
 │   ├── virtualization/               # KVM/Libvirt host preparation
 │   ├── vm-manager/                   # VM lifecycle management
-│   └── users/                        # User provisioning across VMs
+│   ├── vm-snapshot/                  # VM snapshot management (create/list/delete/restore)
+│   ├── users/                        # User provisioning across VMs
+│   ├── common/                       # Common VM configuration
+│   ├── nfs/                          # NFS server configuration
+│   └── dnf-repo/                     # DNF repository configuration
 ├── docs/
 │   └── nfs-dnf-repo.md               # Detailed NFS and DNF repository guide
 └── scripts/

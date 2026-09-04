@@ -1,0 +1,11 @@
+---
+# Default variables for vm-snapshot role
+
+# Snapshot configuration
+snapshot_name: ""
+snapshot_action: create  # Options: create, list, delete, restore
+snapshot_description: "Automated snapshot"
+
+# VM configuration
+vm_name: ""
+snapshot_directory: /var/lib/libvirt/images/snapshots
