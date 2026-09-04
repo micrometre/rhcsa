@@ -1,0 +1,59 @@
+---
+# Main tasks for the NFS role
+
+- name: Install nfs and firewall packages
+  ansible.builtin.dnf:
+    name: 
+      - nfs-utils
+      - firewalld
+      - python3-firewall
+    state: present
+  become: true
+
+- name: Ensure firewalld is enabled and running
+  ansible.builtin.systemd:
+    name: firewalld
+    state: started
+    enabled: yes
+  become: true
+
+- name: Create the shared export folder
+  ansible.builtin.file:
+    path: "{{ nfs_share_dir }}"
+    state: directory
+    mode: '0777'
+  become: true
+
+- name: Create test file in the shared folder
+  ansible.builtin.copy:
+    content: "Welcome to the RHCSA NFS lab\n"
+    dest: "{{ nfs_share_dir }}/testfile.txt"
+    mode: '0644'
+  become: true
+
+- name: Configure NFS exports
+  ansible.builtin.lineinfile:
+    path: /etc/exports
+    line: "{{ nfs_share_dir }} {{ nfs_export_network }}{{ nfs_export_options }}"
+    create: yes
+  become: true
+  notify: reload exports
+
+- name: Enable and start NFS server
+  ansible.builtin.systemd:
+    name: nfs-server
+    state: started
+    enabled: yes
+  become: true
+
+- name: Configure firewalld for NFS services
+  ansible.posix.firewalld:
+    service: "{{ item }}"
+    permanent: yes
+    state: enabled
+    immediate: yes
+  loop:
+    - nfs
+    - mountd
+    - rpc-bind
+  become: true

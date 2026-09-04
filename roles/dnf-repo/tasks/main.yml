@@ -1,0 +1,56 @@
+---
+# Main tasks for the dnf-repo role
+
+- name: Install Apache and createrepo tooling
+  ansible.builtin.dnf:
+    name:
+      - httpd
+      - createrepo
+      - dnf-plugins-core
+      - policycoreutils-python-utils
+    state: present
+  become: true
+
+- name: Create the document root directory for repos
+  ansible.builtin.file:
+    path: "{{ dnf_repo_dir }}"
+    state: directory
+    mode: '0755'
+    setype: httpd_sys_content_t
+  become: true
+
+- name: Download test packages into the repo directory
+  ansible.builtin.shell: |
+    if ! ls {{ dnf_repo_dir }}/{{ item }}-*.rpm 1> /dev/null 2>&1; then
+      dnf download --destdir={{ dnf_repo_dir }} {{ item }}
+    fi
+  loop: "{{ dnf_repo_packages }}"
+  become: true
+  register: download_res
+  changed_when: "'downloaded' in download_res.stdout or 'Saved' in download_res.stdout"
+
+- name: Generate repository metadata
+  ansible.builtin.command: createrepo {{ dnf_repo_dir }}
+  args:
+    creates: "{{ dnf_repo_dir }}/repodata"
+  become: true
+
+- name: Fix SELinux context for the web root
+  ansible.builtin.command: restorecon -Rv /var/www/html
+  changed_when: false
+  become: true
+
+- name: Enable and start Apache HTTPD server
+  ansible.builtin.systemd:
+    name: httpd
+    state: started
+    enabled: yes
+  become: true
+
+- name: Configure firewalld for HTTP
+  ansible.posix.firewalld:
+    service: http
+    permanent: yes
+    state: enabled
+    immediate: yes
+  become: true

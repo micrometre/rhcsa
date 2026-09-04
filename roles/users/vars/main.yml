@@ -1,0 +1,10 @@
+---
+create_users:
+    - sysadmin
+copy_local_key: "{{ lookup('file', '~/.ssh/id_ed25519.pub') }}"
+
+# Initial passwords (override via vault/group_vars in production).
+# Only applied on user creation (update_password: on_create), so changing
+# these later will not silently reset existing accounts.
+regular_user_password: "password"
+

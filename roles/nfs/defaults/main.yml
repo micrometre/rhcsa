@@ -1,0 +1,5 @@
+---
+# Default variables for NFS role
+nfs_share_dir: "/shares/public"
+nfs_export_network: "192.168.122.0/24"
+nfs_export_options: "(rw,sync,no_root_squash)"

@@ -1,0 +1,64 @@
+---
+# VM status and information tasks
+
+- name: Get VM list
+  shell: virsh list --all
+  register: vm_list
+  changed_when: false
+
+- name: Display all VMs
+  debug:
+    msg: "{{ vm_list.stdout_lines }}"
+
+- name: Check specific VM status
+  shell: virsh domstate {{ vm_name }}
+  register: vm_state
+  failed_when: false
+  changed_when: false
+  when: vm_name is defined
+
+- name: Display VM state
+  debug:
+    msg: "VM '{{ vm_name }}' state: {{ vm_state.stdout if vm_state.rc == 0 else 'not found' }}"
+  when: vm_name is defined
+
+- name: Get VM IP address (if running)
+  shell: virsh domifaddr {{ vm_name }}
+  register: vm_ip
+  failed_when: false
+  changed_when: false
+  when: 
+    - vm_name is defined
+    - vm_state.rc == 0
+    - vm_state.stdout | trim == "running"
+
+- name: Display VM IP
+  debug:
+    msg: "{{ vm_ip.stdout_lines }}"
+  when: 
+    - vm_name is defined
+    - vm_ip is defined
+    - vm_ip is not skipped
+    - vm_ip.rc is defined
+    - vm_ip.rc == 0
+
+- name: Get VNC display port
+  shell: virsh vncdisplay {{ vm_name }}
+  register: vnc_port
+  failed_when: false
+  changed_when: false
+  when: 
+    - vm_name is defined
+    - vm_state.rc == 0
+    - vm_state.stdout | trim == "running"
+
+- name: Display VNC connection info
+  debug:
+    msg: "VNC available on: {{ ansible_default_ipv4.address | default(ansible_host) | default('localhost') }}{{ vnc_port.stdout }}"
+  when: 
+    - vm_name is defined
+    - vnc_port is defined
+    - vnc_port is not skipped
+    - vnc_port.rc is defined
+    - vnc_port.rc == 0
+

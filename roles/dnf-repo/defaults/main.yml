@@ -1,0 +1,6 @@
+---
+# Default variables for dnf-repo role
+dnf_repo_dir: "/var/www/html/repos/custom"
+dnf_repo_packages:
+  - zsh
+  - tmux

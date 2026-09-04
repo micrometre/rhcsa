@@ -1,0 +1,10 @@
+---
+# Default variables for vm-manager role
+
+# AlmaLinux cloud image settings
+almalinux_version: "9"
+almalinux_cloud_image_url: "https://repo.almalinux.org/almalinux/{{ almalinux_version }}/cloud/x86_64/images/AlmaLinux-{{ almalinux_version }}-GenericCloud-latest.x86_64.qcow2"
+almalinux_cloud_image_filename: "AlmaLinux-{{ almalinux_version }}-GenericCloud-latest.x86_64.qcow2"
+
+# Libvirt storage paths
+libvirt_images_path: /var/lib/libvirt/images

@@ -1,0 +1,23 @@
+---
+# Main tasks for vm-manager role
+
+# Handle different VM actions
+- name: Include cleanup tasks
+  include_tasks: cleanup.yml
+  when: vm_cleanup | default(false) | bool
+
+- name: Include status tasks
+  include_tasks: status.yml
+  when: vm_action | default('create') == 'status'
+
+- name: Include overview tasks
+  include_tasks: overview.yml
+  when: vm_action | default('create') == 'overview'
+
+- name: Skip VM creation tasks if only checking status, overview or cleaning up, or if vm_name is missing
+  meta: end_play
+  when: >
+    (vm_action | default('create') == 'status') or 
+    (vm_action | default('create') == 'overview') or 
+    (vm_cleanup | default(false) | bool) or
+    (vm_action | default('create') == 'create' and vm_name is not defined)

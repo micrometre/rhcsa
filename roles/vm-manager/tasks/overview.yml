@@ -1,0 +1,36 @@
+---
+# VM workspace overview tasks
+
+- name: Get workspace overview
+  shell: |
+    echo "=== VM Workspace Overview ==="
+    echo "Main workspace: {{ libvirt_images_path }}"
+    echo ""
+    if [ -d "{{ libvirt_images_path }}" ]; then
+      echo "Total workspace usage:"
+      du -sh "{{ libvirt_images_path }}"
+      echo ""
+      echo "VM Directories:"
+      for vm_dir in "{{ libvirt_images_path }}"/*; do
+        if [ -d "$vm_dir" ]; then
+          vm_name=$(basename "$vm_dir")
+          size=$(du -sh "$vm_dir" | cut -f1)
+          echo "  $vm_name: $size"
+        fi
+      done
+      echo ""
+      echo "Detailed structure:"
+      if command -v tree >/dev/null 2>&1; then
+        tree "{{ libvirt_images_path }}" -h
+      else
+        find "{{ libvirt_images_path }}" -type f -exec ls -lh {} \;
+      fi
+    else
+      echo "No workspace directory found"
+    fi
+  register: workspace_overview
+  changed_when: false
+
+- name: Display workspace overview
+  debug:
+    msg: "{{ workspace_overview.stdout_lines }}"

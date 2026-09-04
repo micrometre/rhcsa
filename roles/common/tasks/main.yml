@@ -1,0 +1,83 @@
+---
+# Main tasks for the common role (Basic Setup)
+
+- name: Check if swap is enabled
+  ansible.builtin.command: swapon --show
+  register: swap_check
+  changed_when: false
+  become: true
+
+- name: Create 1GB swapfile to prevent DNF OOM kills
+  ansible.builtin.command: dd if=/dev/zero of=/swapfile bs=1M count=1024
+  when: swap_check.stdout == ""
+  become: true
+
+- name: Set correct permissions for swapfile
+  ansible.builtin.file:
+    path: /swapfile
+    mode: '0600'
+  when: swap_check.stdout == ""
+  become: true
+
+- name: Format swapfile
+  ansible.builtin.command: mkswap /swapfile
+  when: swap_check.stdout == ""
+  become: true
+
+- name: Enable swap
+  ansible.builtin.command: swapon /swapfile
+  when: swap_check.stdout == ""
+  become: true
+
+- name: Add swap to fstab
+  ansible.builtin.lineinfile:
+    path: /etc/fstab
+    line: '/swapfile none swap sw 0 0'
+    state: present
+  become: true
+
+- name: Upgrade all packages
+  ansible.builtin.dnf:
+    name: "*"
+    state: latest
+    update_cache: yes
+  become: true
+
+- name: Install EPEL release repository
+  ansible.builtin.dnf:
+    name: epel-release
+    state: present
+  become: true
+
+- name: Install common utility packages
+  ansible.builtin.dnf:
+    name:
+      - vim
+      - nano
+      - git
+      - curl
+      - wget
+      - htop
+      - tar
+      - unzip
+      - bash-completion
+      - net-tools
+      - bind-utils
+      - tmux
+      - rsync
+      - jq
+      - tree
+    state: present
+  become: true
+
+- name: Enable bash completion for interactive Bash shells
+  ansible.builtin.copy:
+    dest: /etc/profile.d/bash_completion.sh
+    content: |
+      if [ -n "${BASH_VERSION:-}" ] && [ -n "${PS1:-}" ] && [ -r /usr/share/bash-completion/bash_completion ]; then
+        . /usr/share/bash-completion/bash_completion
+      fi
+    owner: root
+    group: root
+    mode: '0644'
+  become: true

@@ -1,0 +1,95 @@
+---
+# Main tasks for virtualization role
+
+- name: Check if running as root
+  fail:
+    msg: "This role should not be run as root user"
+  when: >
+    (ansible_env.SUDO_USER | default(ansible_env.USER | default(ansible_env.LOGNAME | default(ansible_facts["user_id"])))) == 'root'
+
+- name: Check virtualization support
+  shell: grep -E '(vmx|svm)' /proc/cpuinfo
+  register: virt_support
+  failed_when: false
+  changed_when: false
+  when: check_virtualization_support
+
+- name: Warn about missing virtualization support
+  debug:
+    msg: "WARNING: Hardware virtualization support not detected. VMs may not perform optimally."
+  when: 
+    - check_virtualization_support
+    - virt_support.rc != 0
+
+- name: Update package cache
+  apt:
+    update_cache: yes
+    cache_valid_time: 3600
+  become: yes
+
+- name: Install virtualization packages
+  apt:
+    name: "{{ virtualization_packages }}"
+    state: present
+  become: yes
+
+- name: Add user to libvirt group
+  user:
+    name: "{{ ansible_user_id }}"
+    groups: "{{ libvirt_group }}"
+    append: yes
+  become: yes
+  notify: restart libvirtd
+
+- name: Enable and start libvirtd service
+  systemd:
+    name: libvirtd
+    enabled: yes
+    state: started
+  become: yes
+
+- name: Check if default network exists
+  shell: virsh net-list --all | grep -q "default"
+  register: default_network_exists
+  failed_when: false
+  changed_when: false
+  become: yes
+
+- name: Create default network XML configuration
+  template:
+    src: default-network.xml.j2
+    dest: /tmp/default-network.xml
+  when: default_network_exists.rc != 0
+  become: yes
+
+- name: Define default libvirt network
+  shell: virsh net-define /tmp/default-network.xml
+  when: default_network_exists.rc != 0
+  become: yes
+  notify: cleanup network xml
+
+- name: Check if default network is active
+  shell: virsh net-list | grep -q "default.*active"
+  register: default_network_active
+  failed_when: false
+  changed_when: false
+  become: yes
+
+- name: Start default libvirt network
+  shell: virsh net-start default
+  when: default_network_active.rc != 0
+  become: yes
+
+- name: Set default network to autostart
+  shell: virsh net-autostart default
+  become: yes
+
+- name: Verify libvirt installation
+  shell: virsh version
+  register: libvirt_version
+  changed_when: false
+  become: yes
+
+- name: Display libvirt version
+  debug:
+    msg: "Libvirt version: {{ libvirt_version.stdout }}"

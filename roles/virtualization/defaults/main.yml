@@ -1,0 +1,45 @@
+---
+# Default variables for virtualization role
+
+# Virtualization packages to install
+virtualization_packages:
+  - qemu-system-x86
+  - qemu-utils
+  - libvirt-daemon-system
+  - libvirt-clients
+  - bridge-utils
+  - virt-manager
+  - virtinst
+  - genisoimage
+  - wget
+  - curl
+
+# Libvirt group to add user to
+libvirt_group: libvirt
+
+# Default network configuration
+libvirt_default_network:
+  name: default
+  uuid: 9a05da11-e96b-47f3-8253-a3a482e445f5
+  forward_mode: nat
+  bridge_name: virbr0
+  bridge_stp: "on"
+  bridge_delay: "0"
+  mac_address: "52:54:00:0a:cd:21"
+  ip_address: "192.168.122.1"
+  netmask: "255.255.255.0"
+  dhcp_start: "192.168.122.2"
+  dhcp_end: "192.168.122.254"
+
+# Network range configuration (can be overridden)
+vm_network_range:
+  gateway: "192.168.122.1"
+  netmask: "255.255.255.0"
+  network: "192.168.122.0/24"
+  dhcp_start: "192.168.122.10"  # Start DHCP range after reserved IPs
+  dhcp_end: "192.168.122.200"   # Leave room for static IPs at the end
+  static_start: "192.168.122.201"  # Range for static IP assignments
+  static_end: "192.168.122.254"
+
+# Check for hardware virtualization support
+check_virtualization_support: true

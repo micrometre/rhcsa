@@ -1,0 +1,8 @@
+---
+- name: Create rhcsa-node1 VM
+  ansible.builtin.import_playbook: create_rhcsa_node1.yml
+  when: vm_name is not defined or vm_name == 'rhcsa-node1'
+
+- name: Create repo-srv VM
+  ansible.builtin.import_playbook: create_repo_srv.yml
+  when: vm_name is not defined or vm_name == 'repo-srv'

@@ -1,0 +1,35 @@
+---
+# VM cleanup tasks
+
+- name: Get VM status
+  shell: virsh list --all | grep "{{ vm_name }}"
+  register: vm_status
+  failed_when: false
+  changed_when: false
+
+- name: Stop VM if running
+  shell: virsh shutdown {{ vm_name }}
+  when: vm_status.rc == 0 and 'running' in vm_status.stdout
+  ignore_errors: yes
+
+- name: Wait for graceful shutdown
+  wait_for:
+    timeout: 30
+  when: vm_status.rc == 0 and 'running' in vm_status.stdout
+
+- name: Force destroy VM if still running
+  shell: virsh destroy {{ vm_name }}
+  when: vm_status.rc == 0
+  ignore_errors: yes
+
+- name: Remove VM definition and storage
+  shell: virsh undefine {{ vm_name }} --remove-all-storage
+  when: vm_status.rc == 0
+  ignore_errors: yes
+
+- name: Remove cloud-init ISO from libvirt storage
+  file:
+    path: "{{ libvirt_images_path }}/cidata-{{ vm_name }}.iso"
+    state: absent
+  become: yes
+

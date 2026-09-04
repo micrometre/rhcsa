@@ -1,0 +1,14 @@
+---
+# Handlers for virtualization role
+
+- name: restart libvirtd
+  systemd:
+    name: libvirtd
+    state: restarted
+  become: yes
+
+- name: cleanup network xml
+  file:
+    path: /tmp/default-network.xml
+    state: absent
+  become: yes

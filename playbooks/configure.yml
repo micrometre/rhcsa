@@ -1,0 +1,50 @@
+---
+- name: Configure Virtualization Host
+  hosts: localhost
+  gather_facts: true
+
+  # User-scoped roles run as the configured connection user.
+  vars:
+    configure_user: "{{ lookup('env', 'USER') }}"
+    configure_user_home: "{{ lookup('env', 'HOME') }}"
+  
+  roles:
+    - { role: virtualization, tags: ["virtualization", "setup"] }
+    - { role: vm-manager, tags: ["vm-manager", "setup"] }
+  
+  post_tasks:
+    - name: Display configuration status
+      debug:
+        msg: |
+          ========================================
+          Configuration Complete!
+          ========================================
+          Hostname: {{ ansible_facts['hostname'] | default('localhost') }}
+          IP Address: {{ ansible_facts['default_ipv4']['address'] | default('127.0.0.1') }}
+          OS: {{ ansible_facts['distribution'] | default('Linux') }} {{ ansible_facts['distribution_version'] | default('') }}
+          Python: {{ ansible_facts['python_version'] | default('3.x') }}
+          ========================================
+          
+          Next steps:
+          - Add more roles to this playbook as needed
+          - Run 'make deploy' when ready to deploy the application
+          ========================================
+
+- name: Configure VMs
+  hosts: vms
+  become: true
+  gather_facts: true
+
+  roles:
+    - { role: common, tags: ["common", "setup", "update"] }
+    - { role: users, tags: ["users", "setup"] }
+
+- name: Configure repo-srv Services
+  hosts: repo-srv
+  become: true
+  gather_facts: true
+
+  roles:
+    - { role: nfs, tags: ["nfs", "setup"] }
+    - { role: dnf-repo, tags: ["dnf-repo", "setup"] }
+

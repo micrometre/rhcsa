@@ -1,0 +1,126 @@
+---
+- name: Create RHCSA node1 VM
+  hosts: localhost
+  become: true
+  gather_facts: false
+
+  vars:
+    rhcsa_node1_name: rhcsa-node1
+    rhcsa_node1_vcpus: 2
+    rhcsa_node1_memory: 2048
+    rhcsa_node1_disk: /var/lib/libvirt/images/node1.qcow2
+    rhcsa_node1_disk_size: 25G
+    rhcsa_node1_base_image: /var/lib/libvirt/images/AlmaLinux-9-GenericCloud-latest.x86_64.qcow2
+    rhcsa_node1_user_data: /var/lib/libvirt/images/rhcsa-node1-user-data
+    rhcsa_node1_network_config: /var/lib/libvirt/images/rhcsa-node1-network-config
+    rhcsa_node1_meta_data: /var/lib/libvirt/images/rhcsa-node1-meta-data
+    rhcsa_node1_os_variant: almalinux9
+
+  tasks:
+    - name: Check RHCSA node1 base image
+      ansible.builtin.stat:
+        path: "{{ rhcsa_node1_base_image }}"
+      register: rhcsa_node1_base_image_stat
+
+    - name: Require RHCSA node1 base image
+      ansible.builtin.assert:
+        that:
+          - rhcsa_node1_base_image_stat.stat.exists
+          - rhcsa_node1_base_image_stat.stat.isreg
+        fail_msg: >-
+          AlmaLinux base image was not found at {{ rhcsa_node1_base_image }}.
+          Create or copy the base image before running this playbook.
+
+    - name: Check whether rhcsa-node1 already exists
+      ansible.builtin.command: virsh dominfo {{ rhcsa_node1_name }}
+      register: rhcsa_node1_exists
+      failed_when: false
+      changed_when: false
+
+    - name: Create RHCSA node1 disk overlay
+      ansible.builtin.command:
+        cmd: >-
+          qemu-img create -f qcow2 -F qcow2
+          -b {{ rhcsa_node1_base_image }}
+          {{ rhcsa_node1_disk }} {{ rhcsa_node1_disk_size }}
+        creates: "{{ rhcsa_node1_disk }}"
+      when: rhcsa_node1_exists.rc != 0
+
+    - name: Create RHCSA node1 cloud-init user data
+      ansible.builtin.copy:
+        dest: "{{ rhcsa_node1_user_data }}"
+        mode: '0600'
+        content: |
+          #cloud-config
+          disable_root: false
+          ssh_pwauth: true
+          chpasswd:
+            expire: false
+            list:
+              - root:redhat
+              - almalinux:redhat
+          users:
+            - name: root
+              ssh_authorized_keys:
+                - {{ lookup('file', lookup('env', 'HOME') + '/.ssh/id_ed25519.pub') | trim }}
+            - name: almalinux
+              sudo: ALL=(ALL) NOPASSWD:ALL
+              shell: /bin/bash
+              ssh_authorized_keys:
+                - {{ lookup('file', lookup('env', 'HOME') + '/.ssh/id_ed25519.pub') | trim }}
+          runcmd:
+            - sed -i 's/^#*PasswordAuthentication.*/PasswordAuthentication yes/' /etc/ssh/sshd_config
+            - sed -i 's/^#*PermitRootLogin.*/PermitRootLogin yes/' /etc/ssh/sshd_config
+            - systemctl restart sshd
+      when: rhcsa_node1_exists.rc != 0
+
+    - name: Create RHCSA node1 cloud-init meta data
+      ansible.builtin.copy:
+        dest: "{{ rhcsa_node1_meta_data }}"
+        mode: '0600'
+        content: |
+          instance-id: {{ rhcsa_node1_name }}
+          local-hostname: {{ rhcsa_node1_name }}
+      when: rhcsa_node1_exists.rc != 0
+
+    - name: Create RHCSA node1 cloud-init network config
+      ansible.builtin.copy:
+        dest: "{{ rhcsa_node1_network_config }}"
+        mode: '0600'
+        content: |
+          version: 2
+          ethernets:
+            eth0:
+              dhcp4: false
+              addresses:
+                - 192.168.122.100/24
+              gateway4: 192.168.122.1
+              nameservers:
+                addresses:
+                  - 8.8.8.8
+                  - 8.8.4.4
+      when: rhcsa_node1_exists.rc != 0
+
+    - name: Start RHCSA node1 VM
+      ansible.builtin.command:
+        cmd: >-
+          virt-install
+          --name {{ rhcsa_node1_name }}
+          --vcpus {{ rhcsa_node1_vcpus }}
+          --memory {{ rhcsa_node1_memory }}
+          --disk path={{ rhcsa_node1_disk }},format=qcow2
+          --import
+          --os-variant {{ rhcsa_node1_os_variant }}
+          --network network=default,model=virtio
+          --cloud-init user-data={{ rhcsa_node1_user_data }},network-config={{ rhcsa_node1_network_config }},meta-data={{ rhcsa_node1_meta_data }}
+          --noautoconsole
+      when: rhcsa_node1_exists.rc != 0
+      register: rhcsa_node1_install
+
+    - name: Display RHCSA node1 connection information
+      ansible.builtin.debug:
+        msg: >-
+          rhcsa-node1 created. Check its address with
+          'virsh domifaddr rhcsa-node1'. The configured root password is
+          'redhat'.
+      when: rhcsa_node1_install is changed

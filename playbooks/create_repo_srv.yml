@@ -1,0 +1,126 @@
+---
+- name: Create repo-srv VM
+  hosts: localhost
+  become: true
+  gather_facts: false
+
+  vars:
+    repo_srv_name: repo-srv
+    repo_srv_vcpus: 1
+    repo_srv_memory: 1024
+    repo_srv_disk: /var/lib/libvirt/images/repo-srv.qcow2
+    repo_srv_disk_size: 25G
+    repo_srv_base_image: /var/lib/libvirt/images/AlmaLinux-9-GenericCloud-latest.x86_64.qcow2
+    repo_srv_user_data: /var/lib/libvirt/images/repo-srv-user-data
+    repo_srv_network_config: /var/lib/libvirt/images/repo-srv-network-config
+    repo_srv_meta_data: /var/lib/libvirt/images/repo-srv-meta-data
+    repo_srv_os_variant: almalinux9
+
+  tasks:
+    - name: Check AlmaLinux base image
+      ansible.builtin.stat:
+        path: "{{ repo_srv_base_image }}"
+      register: repo_srv_base_image_stat
+
+    - name: Require AlmaLinux base image
+      ansible.builtin.assert:
+        that:
+          - repo_srv_base_image_stat.stat.exists
+          - repo_srv_base_image_stat.stat.isreg
+        fail_msg: >-
+          AlmaLinux base image was not found at {{ repo_srv_base_image }}.
+          Create or copy the base image before running this playbook.
+
+    - name: Check whether repo-srv already exists
+      ansible.builtin.command: virsh dominfo {{ repo_srv_name }}
+      register: repo_srv_exists
+      failed_when: false
+      changed_when: false
+
+    - name: Create repo-srv disk overlay
+      ansible.builtin.command:
+        cmd: >-
+          qemu-img create -f qcow2 -F qcow2
+          -b {{ repo_srv_base_image }}
+          {{ repo_srv_disk }} {{ repo_srv_disk_size }}
+        creates: "{{ repo_srv_disk }}"
+      when: repo_srv_exists.rc != 0
+
+    - name: Create repo-srv cloud-init user data
+      ansible.builtin.copy:
+        dest: "{{ repo_srv_user_data }}"
+        mode: '0600'
+        content: |
+          #cloud-config
+          disable_root: false
+          ssh_pwauth: true
+          chpasswd:
+            expire: false
+            list:
+              - root:redhat
+              - almalinux:redhat
+          users:
+            - name: root
+              ssh_authorized_keys:
+                - {{ lookup('file', lookup('env', 'HOME') + '/.ssh/id_ed25519.pub') | trim }}
+            - name: almalinux
+              sudo: ALL=(ALL) NOPASSWD:ALL
+              shell: /bin/bash
+              ssh_authorized_keys:
+                - {{ lookup('file', lookup('env', 'HOME') + '/.ssh/id_ed25519.pub') | trim }}
+          runcmd:
+            - sed -i 's/^#*PasswordAuthentication.*/PasswordAuthentication yes/' /etc/ssh/sshd_config
+            - sed -i 's/^#*PermitRootLogin.*/PermitRootLogin yes/' /etc/ssh/sshd_config
+            - systemctl restart sshd
+      when: repo_srv_exists.rc != 0
+
+    - name: Create repo-srv cloud-init meta data
+      ansible.builtin.copy:
+        dest: "{{ repo_srv_meta_data }}"
+        mode: '0600'
+        content: |
+          instance-id: {{ repo_srv_name }}
+          local-hostname: {{ repo_srv_name }}
+      when: repo_srv_exists.rc != 0
+
+    - name: Create repo-srv cloud-init network config
+      ansible.builtin.copy:
+        dest: "{{ repo_srv_network_config }}"
+        mode: '0600'
+        content: |
+          version: 2
+          ethernets:
+            eth0:
+              dhcp4: false
+              addresses:
+                - 192.168.122.101/24
+              gateway4: 192.168.122.1
+              nameservers:
+                addresses:
+                  - 8.8.8.8
+                  - 8.8.4.4
+      when: repo_srv_exists.rc != 0
+
+    - name: Start repo-srv VM
+      ansible.builtin.command:
+        cmd: >-
+          virt-install
+          --name {{ repo_srv_name }}
+          --vcpus {{ repo_srv_vcpus }}
+          --memory {{ repo_srv_memory }}
+          --disk path={{ repo_srv_disk }},format=qcow2
+          --import
+          --os-variant {{ repo_srv_os_variant }}
+          --network network=default,model=virtio
+          --cloud-init user-data={{ repo_srv_user_data }},network-config={{ repo_srv_network_config }},meta-data={{ repo_srv_meta_data }}
+          --noautoconsole
+      when: repo_srv_exists.rc != 0
+      register: repo_srv_install
+
+    - name: Display repo-srv connection information
+      ansible.builtin.debug:
+        msg: >-
+          repo-srv created. Check its address with
+          'virsh domifaddr repo-srv'. The configured root password is
+          'redhat'.
+      when: repo_srv_install is changed
