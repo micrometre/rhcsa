@@ -5,9 +5,9 @@ You should practice interrupting GRUB and resetting root until it takes under 90
 
 ## Infrastructure Configuration (Automated via Ansible)
 
-To make this drill easier to practice in our environment, our Ansible `common` role automates the visibility of the GRUB menu during boot. By default, many modern Linux distributions hide the GRUB menu to speed up boot times. 
+To make this drill easier to practice in the environment, the Ansible `common` role automates the visibility of the GRUB menu during boot. By default, many modern Linux distributions hide the GRUB menu to speed up boot times. 
 
-Our playbook applies the following configurations to `/etc/default/grub`:
+The playbook applies the following configurations to `/etc/default/grub`:
 
 ```bash
 # Give yourself 10 seconds to catch the menu
