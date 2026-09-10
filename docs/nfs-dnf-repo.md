@@ -1,6 +1,7 @@
 # NFS and DNF Repository Setup for RHCSA Practice
 
 This guide demonstrates setting up an NFS server and local DNF repository - two critical skills for the RHCSA exam. These services are commonly tested and represent real-world system administration scenarios.
+This guide demonstrates setting up an NFS server and local DNF repository — two critical skills for the RHCSA exam. These services are commonly tested and represent real-world system administration scenarios.
 
 ## RHCSA Exam Relevance
 
@@ -40,6 +41,7 @@ By completing this lab, you will practice:
 ```
 
 ## Best Practices & Security Considerations
+**What you'll practice:** Service management (`systemctl`), firewall configuration (`firewall-cmd`), SELinux contexts (`restorecon`), NFS exports, Apache web server, local DNF repositories, and troubleshooting.
 
 ### NFS Security
 - **`no_root_squash`**: Used in this lab for convenience, but **not recommended in production**. It allows root users on clients to have root access on the server. In production, use `root_squash` (default) or specific UID/GID mappings.
@@ -74,11 +76,13 @@ By completing this lab, you will practice:
 
 > **NOTE:** This guide has been fully automated via Ansible.
 > To deploy the NFS Server on `repo-srv`, run: `make nfs_setup`
+> To deploy, run: `make nfs_setup` (NFS) or `make dnf_repo_setup` (DNF repo).
 > The instructions below are kept for manual reference and learning purposes.
 > ---
 
 ### NFS Server Setup
 
+```bash
 # 1. Install nfs-utils
 sudo dnf install -y nfs-utils
 
@@ -89,6 +93,7 @@ echo "Welcome to the RHCSA NFS lab" | sudo tee /shares/public/testfile.txt
 
 # 3. Define the export (/etc/exports)
 # Replace subnet with your libvirt network CIDR
+# 3. Define the export (/etc/exports) — replace subnet with your libvirt network CIDR
 echo '/shares/public 192.168.122.0/24(rw,sync,no_root_squash)' | sudo tee /etc/exports
 
 # 4. Reload exports after modifying /etc/exports
@@ -98,10 +103,12 @@ sudo exportfs -rv
 sudo systemctl enable --now nfs-server
 
 # 6. Open Firewall ports
+# 6. Open firewall ports
 sudo firewall-cmd --permanent --add-service=nfs
 sudo firewall-cmd --permanent --add-service=mountd
 sudo firewall-cmd --permanent --add-service=rpc-bind
 sudo firewall-cmd --reload
+```
 
 
 
@@ -112,6 +119,7 @@ sudo firewall-cmd --reload
 > The instructions below are kept for manual reference and learning purposes.
 > ---
 
+```bash
 # 1. Install Apache and createrepo tooling
 sudo dnf install -y httpd createrepo
 
@@ -122,27 +130,35 @@ sudo mkdir -p /var/www/html/repos/custom
 # If you have the ISO on the host, pass it in and mount it:
 # mount -o loop /dev/cdrom /var/www/html/repos/
 # Alternatively, download a couple of test RPMs into custom/:
+# 3. Add sample test packages (or mount a full AlmaLinux ISO)
 sudo dnf download --destdir=/var/www/html/repos/custom zsh tmux
 
 # 4. Generate repository metadata
 # This creates the repomd.xml and other metadata files required by DNF
+# 4. Generate repository metadata (creates repomd.xml required by DNF)
 sudo createrepo /var/www/html/repos/custom
 
 # 5. Fix SELinux context for the web root
 # Apache requires httpd_sys_content_t context to serve files
+# 5. Fix SELinux context — Apache requires httpd_sys_content_t to serve files
 sudo restorecon -Rv /var/www/html
 
 # 6. Start Apache and open firewalld
+# 6. Start Apache and open firewall
 sudo systemctl enable --now httpd
 sudo firewall-cmd --permanent --add-service=http
 sudo firewall-cmd --reload
+```
 
+---
 
 ## Verification from Client (rhcsa-node1)
 
 Switch to your main RHCSA practice VM (rhcsa-node1) and test both services. This verification process is itself a key exam skill - you must be able to confirm services are working correctly.
+Switch to your main RHCSA practice VM (`rhcsa-node1`) and test both services. This verification process is itself a key exam skill.
 
 ### Test NFS Export
+**Test NFS Export:**
 
 ```bash
 # Discover available shares from the server
@@ -164,8 +180,13 @@ sudo umount /mnt/nfs
 ```
 <repo-srv-ip>:/shares/public /mnt/nfs nfs defaults 0 0
 ```
+> **Exam Tip:** To make NFS mounts persistent, add to `/etc/fstab`:
+> ```
+> <repo-srv-ip>:/shares/public /mnt/nfs nfs defaults 0 0
+> ```
 
 ### Test Local DNF Repo
+**Test Local DNF Repo:**
 
 ```bash
 # Create a .repo file on the client
@@ -191,15 +212,22 @@ sudo dnf --disablerepo="*" --enablerepo="local-lab" install -y zsh
 3. SELinux contexts on the server
 4. Firewall rules on the server
 5. Repository metadata (repomd.xml exists and is accessible)
+> **Exam Tip:** When troubleshooting DNF issues, check: repo file syntax, network connectivity, SELinux contexts on the server, firewall rules, and that `repomd.xml` exists and is accessible.
 
 ## RHCSA Exam Strategy
+---
 
 ### Time Management
 - **NFS Tasks:** Usually 5-10 minutes if you're comfortable with the commands
 - **DNF Repo Tasks:** Usually 5-8 minutes, plus time for package downloads if needed
 - **Combined:** Budget 15-20 minutes for both tasks together
+## Troubleshooting
 
 ### Common Exam Scenarios
+**NFS Issues:**
+- **"Permission denied" on mount** — Check `/etc/exports` syntax and ensure the client IP is in the allowed range. Run `exportfs -rv` to reload.
+- **"Stale file handle"** — The server export changed while mounted. Unmount and remount on the client.
+- **Firewall blocking** — Ensure `nfs`, `mountd`, and `rpc-bind` services are allowed through firewalld.
 
 1. **"Configure NFS export"**: You'll need to:
    - Install `nfs-utils`
@@ -208,12 +236,17 @@ sudo dnf --disablerepo="*" --enablerepo="local-lab" install -y zsh
    - Enable and start `nfs-server`
    - Configure firewall
    - Reload exports with `exportfs -rv`
+**DNF Repository Issues:**
+- **"Repomd.xml not found"** — Repository metadata wasn't generated or is in the wrong location. Run `createrepo` in the correct directory.
+- **SELinux denials** — Apache can't read files due to incorrect context. Run `restorecon -Rv /var/www/html`.
+- **Package not found** — Verify the `.repo` file `baseurl` matches the actual directory structure on the server.
 
 2. **"Configure system to use NFS"**: You'll need to:
    - Install `nfs-utils` on client
    - Create mount point
    - Mount manually first (to verify)
    - Add to `/etc/fstab` for persistence (if required)
+---
 
 3. **"Create a local repository"**: You'll need to:
    - Install `httpd` and `createrepo`
@@ -223,6 +256,7 @@ sudo dnf --disablerepo="*" --enablerepo="local-lab" install -y zsh
    - Fix SELinux contexts
    - Start `httpd` and configure firewall
    - Create `.repo` file on client
+## Quick Reference Commands
 
 4. **"Configure system to use local repository"**: You'll need to:
    - Create `.repo` file in `/etc/yum.repos.d/`
@@ -242,17 +276,21 @@ systemctl status nfs-server        # Check NFS service status
 dnf repolist                       # List enabled repositories
 dnf repolist --all                 # List all repositories (enabled/disabled)
 dnf info <package>                # Show package info
+dnf repolist --all                 # List all repositories
+dnf info <package>                 # Show package info
 dnf provides <file>                # Find which package provides a file
 cat /etc/yum.repos.d/*.repo       # Review all repo files
 ```
 
 ## Beyond the Exam: Real-World Applications
+---
 
 ### Enterprise NFS Use Cases
 - **Home Directories**: Centralized user home directories for consistency across servers
 - **Application Data**: Shared application data between web servers
 - **Backup Storage**: Centralized backup target
 - **Media Storage**: Shared media files for streaming services
+## Security & Best Practices
 
 ### Enterprise DNF Repo Use Cases
 - **Air-Gapped Environments**: Systems without internet access need local repos
@@ -260,6 +298,12 @@ cat /etc/yum.repos.d/*.repo       # Review all repo files
 - **Version Control**: Pin specific package versions for consistency
 - **Bandwidth Optimization**: Reduce external bandwidth usage
 - **Compliance**: Control exactly which packages can be installed
+- **`no_root_squash`** is used in this lab for convenience but is **not recommended in production** — it gives root on clients root access on the server. Use `root_squash` (default) instead.
+- **NFS exports** — Limit to specific subnets rather than broad ranges. Use `ro` instead of `rw` when clients only need read access.
+- **GPG checking** — Set `gpgcheck=1` in production and sign your packages. This lab uses `gpgcheck=0` for simplicity.
+- **SELinux** — Always run `restorecon` after placing files in web-accessible directories.
+- **NFS performance** — Use `sync` (default) for data integrity or `async` for better performance at the cost of potential data loss.
+- **Large repos** — Use `createrepo --update` to only update changed packages rather than regenerating all metadata.
 
 ## Additional Resources
 
@@ -268,6 +312,7 @@ cat /etc/yum.repos.d/*.repo       # Review all repo files
 - `man exportfs` - Export management
 - `man createrepo` - Repository metadata creation
 - `man yum.conf` - DNF/YUM configuration options
+**Man pages to study:** `man exports`, `man exportfs`, `man createrepo`, `man yum.conf`
 
 ### Related RHCSA Objectives
 - Configure network storage (NFS)
@@ -275,3 +320,4 @@ cat /etc/yum.repos.d/*.repo       # Review all repo files
 - Manage firewall rules using firewalld
 - Manage SELinux contexts
 - Configure systemd services
+**Related RHCSA objectives:** Configure network storage (NFS), configure local repositories, manage firewall rules using firewalld, manage SELinux contexts, configure systemd services.
