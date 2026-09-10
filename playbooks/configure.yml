@@ -12,6 +12,7 @@
     - { role: virtualization, tags: ["virtualization", "setup"] }
     - { role: vm-manager, tags: ["vm-manager", "setup"] }
     - { role: vm-snapshot, tags: ["snapshot"] }
+    - { role: lvm_rhcsa, tags: ["lvm", "setup"] }
   
   post_tasks:
     - name: Display configuration status

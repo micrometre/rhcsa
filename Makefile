@@ -1,4 +1,7 @@
-.PHONY: help configure_virtualization configure_vm_manager create_vms create_rhcsa_node1 create_repo_srv basic_setup nfs_setup dnf_repo_setup create_users vm_status workspace clean clean_all snapshot_create snapshot_list list_snapshot list_all_snapshots snapshot_delete snapshot_restore snapshot_current
+.PHONY: help configure_virtualization configure_vm_manager create_vms create_rhcsa_node1 create_repo_srv basic_setup nfs_setup dnf_repo_setup create_users vm_status workspace clean clean_all snap_create snap_list snap_list_all snap_delete snap_restore snap_current
+
+# All VMs managed by this project
+ALL_VMS := rhcsa-node1 repo-srv
 
 help:
 	@echo "Ansible Infrastructure Management"
@@ -15,13 +18,12 @@ help:
 	@echo "  create_users           - Create users inside node1"
 	@echo "  vm_status              - Check status of VMs"
 	@echo "  workspace              - Show VM workspace overview"
-	@echo "  snapshot_create        - Create VM snapshot (VM_NAME required)"
-	@echo "  snapshot_list          - List VM snapshots (VM_NAME required)"
-	@echo "  list_snapshot          - List VM snapshots (VM_NAME required) [alias]"
-	@echo "  list_all_snapshots     - List all snapshots for all VMs"
-	@echo "  snapshot_delete        - Delete VM snapshot (VM_NAME and SNAPSHOT_NAME required)"
-	@echo "  snapshot_restore       - Restore VM snapshot (VM_NAME and SNAPSHOT_NAME required)"
-	@echo "  snapshot_current       - Show current VM snapshot (VM_NAME required)"
+	@echo "  snap_create            - Create VM snapshot (VM_NAME required, SNAP optional)"
+	@echo "  snap_list              - List VM snapshots (VM_NAME required)"
+	@echo "  snap_list_all          - List snapshots for all VMs"
+	@echo "  snap_delete            - Delete VM snapshot (VM_NAME and SNAP required)"
+	@echo "  snap_restore           - Restore VM snapshot (VM_NAME and SNAP required)"
+	@echo "  snap_current           - Show current VM snapshot (VM_NAME required)"
 	@echo "  clean                  - Cleanup a specific VM (default: node1)"
 	@echo "  clean_all              - Remove all VM images and workspace"
 
@@ -75,6 +77,12 @@ create_users:
 	@echo ""
 	@echo "✅ Users created successfully!"
 
+lvm_setup:
+	@echo "Configuring LVM and adding disk for rhcsa-node1..."
+	ansible-playbook playbooks/configure.yml --tags lvm
+	@echo ""
+	@echo "✅ LVM setup completed!"
+
 
 vm_status:
 	@echo "Checking VM status..."
@@ -95,44 +103,80 @@ clean_all:
 	rm -rf $(HOME)/vm-images
 	@echo "✅ All VM data cleaned!"
 
-snapshot_create:
-	@echo "Creating snapshot for VM $(VM_NAME)..."
-	ansible-playbook playbooks/configure.yml --tags snapshot -e "snapshot_action=create" -e "vm_name=$(VM_NAME)" $(if $(SNAPSHOT_NAME),-e "snapshot_name=$(SNAPSHOT_NAME)",)
-	@echo "✅ Snapshot created!"
-
-snapshot_list:
+# ── Snapshot helpers ──────────────────────────────────────────────────
+define check_vm
 	@if [ -z "$(VM_NAME)" ]; then \
-		echo "Error: VM_NAME is required. Usage: make snapshot_list VM_NAME=<vm-name>"; \
-		echo "Or use 'make list_all_snapshots' to list all VM snapshots."; \
+		echo "❌ Error: VM_NAME is required."; \
+		echo "Usage: make $@ VM_NAME=<vm-name>"; \
 		exit 1; \
 	fi
+endef
+
+define check_snap
+	@if [ -z "$(SNAP)" ]; then \
+		echo "❌ Error: SNAP is required."; \
+		echo "Usage: make $@ VM_NAME=<vm-name> SNAP=<snapshot-name>"; \
+		exit 1; \
+	fi
+endef
+
+snap_create:
+	$(check_vm)
+	@echo "Creating snapshot for VM $(VM_NAME)..."
+	ansible-playbook playbooks/configure.yml --tags snapshot \
+		-e "snapshot_action=create" \
+		-e "vm_name=$(VM_NAME)" \
+		$(if $(SNAP),-e "snapshot_name=$(SNAP)",)
+	@echo "✅ Snapshot created!"
+
+snap_list:
+	$(check_vm)
 	@echo "Listing snapshots for VM $(VM_NAME)..."
-	ansible-playbook playbooks/configure.yml --tags snapshot -e "snapshot_action=list" -e "vm_name=$(VM_NAME)"
+	ansible-playbook playbooks/configure.yml --tags snapshot \
+		-e "snapshot_action=list" \
+		-e "vm_name=$(VM_NAME)"
 
-list_snapshot: snapshot_list
+snap_list_all:
+	@$(foreach vm,$(ALL_VMS), \
+		echo "=== $(vm) ===" ; \
+		virsh snapshot-list $(vm) --tree 2>/dev/null || echo "  No snapshots or VM not found" ; \
+		echo "" ; \
+	)
 
-list_all_snapshots:
-	@echo "Listing all snapshots for all VMs..."
-	@echo "=== rhcsa-node1 ==="
-	@virsh snapshot-list rhcsa-node1 --tree || echo "No snapshots or VM not running"
-	@echo ""
-	@echo "=== repo-srv ==="
-	@virsh snapshot-list repo-srv --tree || echo "No snapshots or VM not running"
+snap_delete:
+	$(check_vm)
+	$(check_snap)
+	@echo "Deleting snapshot '$(SNAP)' from VM $(VM_NAME)..."
+	ansible-playbook playbooks/configure.yml --tags snapshot \
+		-e "snapshot_action=delete" \
+		-e "vm_name=$(VM_NAME)" \
+		-e "snapshot_name=$(SNAP)"
+	@echo "✅ Snapshot '$(SNAP)' deleted!"
 
-snapshot_delete:
-	@echo "Deleting snapshot $(SNAPSHOT_NAME) from VM $(VM_NAME)..."
-	ansible-playbook playbooks/configure.yml --tags snapshot -e "snapshot_action=delete" -e "vm_name=$(VM_NAME)" -e "snapshot_name=$(SNAPSHOT_NAME)"
-	@echo "✅ Snapshot deleted!"
+snap_restore:
+	$(check_vm)
+	$(check_snap)
+	@echo "Restoring snapshot '$(SNAP)' for VM $(VM_NAME)..."
+	ansible-playbook playbooks/configure.yml --tags snapshot \
+		-e "snapshot_action=restore" \
+		-e "vm_name=$(VM_NAME)" \
+		-e "snapshot_name=$(SNAP)"
+	@echo "✅ Snapshot '$(SNAP)' restored!"
 
-snapshot_restore:
-	@echo "Restoring snapshot $(SNAPSHOT_NAME) for VM $(VM_NAME)..."
-	ansible-playbook playbooks/configure.yml --tags snapshot -e "snapshot_action=restore" -e "vm_name=$(VM_NAME)" -e "snapshot_name=$(SNAPSHOT_NAME)"
-	@echo "✅ Snapshot restored!"
-
-snapshot_current:
+snap_current:
+	$(check_vm)
 	@echo "Showing current snapshot for VM $(VM_NAME)..."
-	ansible-playbook playbooks/configure.yml --tags snapshot -e "snapshot_action=current" -e "vm_name=$(VM_NAME)"
+	ansible-playbook playbooks/configure.yml --tags snapshot \
+		-e "snapshot_action=current" \
+		-e "vm_name=$(VM_NAME)"
 
 # Legacy compatibility targets
 check: vm_status
 status: vm_status
+snapshot_create: snap_create
+snapshot_list: snap_list
+snapshot_delete: snap_delete
+snapshot_restore: snap_restore
+snapshot_current: snap_current
+list_all_snapshots: snap_list_all
+

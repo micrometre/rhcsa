@@ -67,6 +67,7 @@
       - rsync
       - jq
       - tree
+      - lvm2
     state: present
   become: true
 
@@ -82,14 +83,16 @@
     mode: '0644'
   become: true
 
-- name: Set GRUB timeout and style to show menu
+- name: Set GRUB timeout, style, and serial console for virsh access
   ansible.builtin.lineinfile:
     path: /etc/default/grub
     regexp: '^{{ item.key }}='
     line: '{{ item.key }}={{ item.value }}'
     state: present
   loop:
-    - { key: 'GRUB_TIMEOUT', value: '5' }
+    - { key: 'GRUB_TIMEOUT', value: '10' }
     - { key: 'GRUB_TIMEOUT_STYLE', value: 'menu' }
+    - { key: 'GRUB_TERMINAL', value: '"serial console"' }
+    - { key: 'GRUB_SERIAL_COMMAND', value: '"serial --speed=115200 --unit=0 --word=8 --parity=no --stop=1"' }
   become: true
   notify: Rebuild GRUB config

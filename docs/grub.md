@@ -8,10 +8,18 @@ You should practice interrupting GRUB and resetting root until it takes under 90
 To make this drill easier to practice in our environment, our Ansible `common` role automates the visibility of the GRUB menu during boot. By default, many modern Linux distributions hide the GRUB menu to speed up boot times. 
 
 Our playbook applies the following configurations to `/etc/default/grub`:
-- `GRUB_TIMEOUT=5`: Provides a 5-second countdown before the default kernel is booted.
-- `GRUB_TIMEOUT_STYLE=menu`: Forces the menu to be displayed, overriding any hidden settings.
 
-Whenever these settings are updated, a handler automatically rebuilds the GRUB configuration using `grub2-mkconfig -o /boot/grub2/grub.cfg`. This ensures you always have a clear 5-second window to interrupt the boot process and begin the drill.
+```bash
+# Give yourself 10 seconds to catch the menu
+GRUB_TIMEOUT=10
+GRUB_TIMEOUT_STYLE=menu
+
+# Send GRUB interface to both the virtual display (console) and serial port (serial)
+GRUB_TERMINAL="serial console"
+GRUB_SERIAL_COMMAND="serial --speed=115200 --unit=0 --word=8 --parity=no --stop=1"
+```
+
+Whenever these settings are updated, a handler automatically rebuilds the GRUB configuration using `grub2-mkconfig -o /boot/grub2/grub.cfg`. This ensures you always have a clear 10-second window to interrupt the boot process and begin the drill, with output visible on both the console and serial port.
 
 ## The Drill
 
