@@ -1,21 +1,98 @@
 # lvm_rhcsa
 
-An Ansible role to configure LVM and add secondary disks to the RHCSA training nodes (e.g., `rhcsa-node1`).
+An Ansible role to configure LVM and manage secondary disks on the RHCSA training node (`rhcsa-node1`).
 
-## Description
+## Overview
 
-This role performs the following tasks to set up Logical Volume Management (LVM):
+This role covers the full LVM lifecycle — from installing the `lvm2` package through to live-migrating data between physical volumes with `pvmove`. Each step is split into its own task file and can be run independently via the Makefile.
 
-1. **Install lvm2**: Installs the `lvm2` package on the target VM.
-2. **Create Disk Images**: Creates new 10GB qcow2 disk images (`rhcsa-data1.qcow2` and `rhcsa-data2.qcow2`) in the libvirt images directory.
-3. **Attach Disks**: Attaches the new disks to the `rhcsa-node1` VM as the `vdb` and `vdc` block devices.
-4. **Verify Attachment**: Lists the block devices for `rhcsa-node1` to confirm the disk is attached.
-5. **Create Physical Volume (PV)**: Initializes `/dev/vdb` as a physical volume.
-6. **Verify PV**: Displays physical volume details to confirm creation.
-7. **Create Volume Group (VG)**: Creates a volume group named `data_vg` from the physical volume.
-8. **Verify VG**: Displays volume group details to confirm creation.
-9. **Create Logical Volume (LV)**: Creates a 4GB logical volume named `app_lv` within `data_vg`.
-10. **Verify LV**: Displays logical volume details to confirm creation.
+### LVM Architecture
+
+```
+┌──────────────────────────────────────────────────────┐
+│  rhcsa-node1 VM                                      │
+│                                                      │
+│  /dev/vdb (10G)          /dev/vdc (10G)              │
+│       │                       │                      │
+│       ▼                       ▼                      │
+│  ┌─────────┐            ┌─────────┐                  │
+│  │   PV    │            │   PV    │                  │
+│  └────┬────┘            └────┬────┘                  │
+│       │                      │                       │
+│       ▼                      ▼                       │
+│  ┌──────────────────────────────────┐                │
+│  │       VG: data_vg                │                │
+│  │                                  │                │
+│  │  ┌──────────┐  ┌──────────┐     │                │
+│  │  │  app_lv  │  │  db_lv   │     │                │
+│  │  │   4G     │  │  4G→5G   │     │                │
+│  │  └──────────┘  └────┬─────┘     │                │
+│  └──────────────────────┼──────────┘                │
+│                         │                            │
+│                    XFS format                        │
+│                    mount → /mnt/database              │
+└──────────────────────────────────────────────────────┘
+```
+
+## Task Files
+
+Each step lives in its own YAML file under `roles/lvm_rhcsa/tasks/`:
+
+| Task file | Make target | Description |
+|---|---|---|
+| `install_lvm.yml` | `make lvm_install` | Install the `lvm2` package inside the VM |
+| `create_disk.yml` | `make lvm_create_disk` | Create `rhcsa-data1.qcow2` (10G) and attach as `/dev/vdb` |
+| `create_pv.yml` | `make lvm_create_pv` | `pvcreate /dev/vdb` — stamp the LVM header |
+| `create_vg.yml` | `make lvm_create_vg` | `vgcreate data_vg /dev/vdb` — create the storage pool |
+| `create_lv.yml` | `make lvm_create_lv` | Create `app_lv` (4G) and `db_lv` (4G) in `data_vg` |
+| `format_mount.yml` | `make lvm_format_mount` | Format `db_lv` with XFS and mount to `/mnt/database` |
+| `extend_lv.yml` | `make lvm_extend_lv` | Extend `db_lv` by 1G (4G → 5G) with live filesystem resize |
+| `lvm_summary.yml` | `make lvm_summary` | Show JSON summary of all PVs, VGs, LVs, and block devices |
+| `configure.yml` | `make lvm_setup` | **Full setup** — runs all of the above in order |
+| `cleanup.yml` | `make lvm_clean` | Tear down: unmount, remove LVs, VG, and PV |
+| `add_hd.yml` | `make lvm_add_hd` | Create `rhcsa-data2.qcow2` (10G) and attach as `/dev/vdc` |
+| `prepare_vdc.yml` | `make lvm_prepare_vdc` | `pvcreate /dev/vdc` + `vgextend data_vg /dev/vdc` |
+| `pvmove.yml` | `make lvm_pvmove` | Live-migrate all data from `/dev/vdb` → `/dev/vdc` |
+
+> **Note:** `make lvm_reconfigure` runs `lvm_clean` followed by `lvm_setup` for a full reset.
+
+## Typical Workflows
+
+### Initial Setup (all-in-one)
+
+```bash
+make lvm_setup
+```
+
+### Step-by-Step Setup
+
+```bash
+make lvm_install         # 1. Install lvm2
+make lvm_create_disk     # 2. Create & attach vdb
+make lvm_create_pv       # 3. Initialize PV
+make lvm_create_vg       # 4. Create VG
+make lvm_create_lv       # 5. Create LVs
+make lvm_format_mount    # 6. Format & mount db_lv
+make lvm_extend_lv       # 7. Extend db_lv +1G
+make lvm_summary         # 8. Verify everything
+```
+
+### Live Migration (pvmove)
+
+Migrate all data from `vdb` to `vdc` with zero downtime:
+
+```bash
+make lvm_add_hd          # 1. Create & attach vdc
+make lvm_prepare_vdc     # 2. pvcreate + vgextend (add vdc to data_vg)
+make lvm_pvmove          # 3. pvmove /dev/vdb /dev/vdc
+```
+
+### Clean & Reconfigure
+
+```bash
+make lvm_clean           # Tear down LVM (unmount, lvremove, vgremove, pvremove)
+make lvm_reconfigure     # Clean + full setup in one command
+```
 
 ## Commands Reference
 
@@ -41,49 +118,68 @@ sudo virsh attach-disk rhcsa-node1 \
   --driver qemu \
   --subdriver qcow2
 
-# Verify the disk is attached
+# Verify disks are attached
 sudo virsh domblklist rhcsa-node1
 ```
 
 ### Physical Volume (run inside the VM)
 
 ```bash
-# Create a physical volume on /dev/vdb
 sudo pvcreate /dev/vdb
-
-# Verify the physical volume
-sudo pvdisplay /dev/vdb
+sudo pvcreate /dev/vdc          # for the second disk
+sudo pvdisplay
 ```
 
 ### Volume Group (run inside the VM)
 
 ```bash
-# Create a volume group named data_vg
-sudo vgcreate data_vg /dev/vdb
-
-# Verify the volume group
+sudo vgcreate data_vg /dev/vdb  # create VG with vdb
+sudo vgextend data_vg /dev/vdc  # add vdc to existing VG
 sudo vgdisplay data_vg
 ```
 
 ### Logical Volume (run inside the VM)
 
 ```bash
-# Create a 4GB logical volume named app_lv
+# Create logical volumes
 sudo lvcreate -n app_lv -L 4G data_vg
+sudo lvcreate -n db_lv -L 4G data_vg
 
-# Verify the logical volume
+# Format and mount
+sudo mkfs.xfs /dev/mapper/data_vg-db_lv
+sudo mkdir -p /mnt/database
+sudo mount /dev/mapper/data_vg-db_lv /mnt/database
+
+# Extend LV + filesystem together
+sudo lvextend -r -L +1G /dev/mapper/data_vg-db_lv
+
+# Verify
 sudo lvdisplay /dev/data_vg/app_lv
+sudo lvdisplay /dev/data_vg/db_lv
+df -h /mnt/database
+```
+
+### Live Migration with pvmove (run inside the VM)
+
+```bash
+# Migrate all extents from vdb to vdc (zero downtime)
+sudo pvmove /dev/vdb /dev/vdc
+
+# Verify data is now on vdc
+sudo pvdisplay
 ```
 
 ## Requirements
 
 - KVM/Libvirt must be installed and running on the host machine.
 - `qemu-img` and `virsh` commands must be available and executable by the Ansible user.
-- The `rhcsa-node1` virtual machine must exist.
+- The `rhcsa-node1` virtual machine must exist and be running.
 
 ## Role Variables
 
-None currently defined.
+| Variable | Default | Description |
+|---|---|---|
+| `lvm_action` | `configure` | Which task file to run (see Task Files table above) |
 
 ## Dependencies
 
@@ -96,14 +192,6 @@ None.
   hosts: localhost
   roles:
     - { role: lvm_rhcsa, tags: ["lvm", "setup"] }
-```
-
-## Usage
-
-You can trigger this role via the project's Makefile:
-
-```bash
-make lvm_setup
 ```
 
 ## License

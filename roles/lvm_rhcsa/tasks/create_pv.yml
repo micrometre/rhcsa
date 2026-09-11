@@ -1,0 +1,29 @@
+---
+# Initialize /dev/vdb as a physical volume
+
+- name: Check if Physical Volume exists on /dev/vdb
+  ansible.builtin.command: pvs /dev/vdb
+  delegate_to: rhcsa-node1
+  become: yes
+  register: pv_check
+  changed_when: false
+  failed_when: false
+
+- name: Stamp the raw drive with the LVM header Create Physical Volume on /dev/vdb (inside the VM)
+  ansible.builtin.command: pvcreate /dev/vdb
+  delegate_to: rhcsa-node1
+  become: yes
+  when: pv_check.rc != 0
+
+- name: Verify Physical Volume
+  ansible.builtin.command: pvdisplay /dev/vdb
+  delegate_to: rhcsa-node1
+  become: yes
+  register: pvdisplay_output
+  changed_when: false
+  ignore_errors: yes
+
+- name: Show PV verification
+  ansible.builtin.debug:
+    var: pvdisplay_output.stdout_lines
+

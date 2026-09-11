@@ -5,13 +5,50 @@
   include_tasks: cleanup.yml
   when: lvm_action | default('configure') == 'clean'
 
-- name: Install and configure LVM
+- name: Install and configure LVM (full setup)
   include_tasks: configure.yml
   when: lvm_action | default('configure') == 'configure'
 
-- name: Add a brand new physical drive to expand the pool  
+- name: Install lvm2 package
+  include_tasks: install_lvm.yml
+  when: lvm_action | default('configure') == 'install_lvm'
+
+- name: Create and attach disk (vdb)
+  include_tasks: create_disk.yml
+  when: lvm_action | default('configure') == 'create_disk'
+
+- name: Create Physical Volume on /dev/vdb
+  include_tasks: create_pv.yml
+  when: lvm_action | default('configure') == 'create_pv'
+
+- name: Create Volume Group data_vg
+  include_tasks: create_vg.yml
+  when: lvm_action | default('configure') == 'create_vg'
+
+- name: Create Logical Volumes (app_lv, db_lv)
+  include_tasks: create_lv.yml
+  when: lvm_action | default('configure') == 'create_lv'
+
+- name: Format and mount db_lv
+  include_tasks: format_mount.yml
+  when: lvm_action | default('configure') == 'format_mount'
+
+- name: Extend db_lv by 1G
+  include_tasks: extend_lv.yml
+  when: lvm_action | default('configure') == 'extend_lv'
+
+- name: Show LVM summary
+  include_tasks: lvm_summary.yml
+  when: lvm_action | default('configure') == 'lvm_summary'
+
+- name: Add a brand new physical drive to expand the pool
   include_tasks: add_hd.yml
   when: lvm_action | default('configure') == 'add_hd'
+
+- name: Initialize /dev/vdc as PV and add to data_vg
+  include_tasks: prepare_vdc.yml
+  when: lvm_action | default('configure') == 'prepare_vdc'
+
 - name: use pvmove to migrate all data off vdb and onto vdc with zero downtime
   include_tasks: pvmove.yml
   when: lvm_action | default('configure') == 'pvmove'

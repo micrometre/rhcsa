@@ -1,0 +1,10 @@
+---
+# Install the lvm2 package inside the VM
+
+- name: Install lvm2 (inside the VM)
+  ansible.builtin.package:
+    name: lvm2
+    state: present
+  delegate_to: rhcsa-node1
+  become: yes
+

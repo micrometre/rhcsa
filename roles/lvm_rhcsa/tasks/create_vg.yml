@@ -1,0 +1,29 @@
+---
+# Create the data_vg volume group from /dev/vdb
+
+- name: Check if Volume Group data_vg exists
+  ansible.builtin.command: vgs data_vg
+  delegate_to: rhcsa-node1
+  become: yes
+  register: vg_check
+  changed_when: false
+  failed_when: false
+
+- name: Create Volume Group by adding the PV into a new storage pool named data_vg
+  ansible.builtin.command: vgcreate data_vg /dev/vdb
+  delegate_to: rhcsa-node1
+  become: yes
+  when: vg_check.rc != 0
+
+- name: Verify Volume Group
+  ansible.builtin.command: vgdisplay data_vg
+  delegate_to: rhcsa-node1
+  become: yes
+  register: vgdisplay_output
+  changed_when: false
+  ignore_errors: yes
+
+- name: Show VG verification
+  ansible.builtin.debug:
+    var: vgdisplay_output.stdout_lines
+

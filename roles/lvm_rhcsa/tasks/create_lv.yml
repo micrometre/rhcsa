@@ -1,0 +1,55 @@
+---
+# Create logical volumes app_lv and db_lv in data_vg
+
+- name: Check if Logical Volume app_lv exists
+  ansible.builtin.command: lvs data_vg/app_lv
+  delegate_to: rhcsa-node1
+  become: yes
+  register: app_lv_check
+  changed_when: false
+  failed_when: false
+
+- name: Create Logical Volume app_lv
+  ansible.builtin.command: lvcreate -y -n app_lv -L 4G data_vg
+  delegate_to: rhcsa-node1
+  become: yes
+  when: app_lv_check.rc != 0
+
+- name: Verify Logical Volume
+  ansible.builtin.command: lvdisplay /dev/data_vg/app_lv
+  delegate_to: rhcsa-node1
+  become: yes
+  register: lvdisplay_output
+  changed_when: false
+  ignore_errors: yes
+
+- name: Show LV verification
+  ansible.builtin.debug:
+    var: lvdisplay_output.stdout_lines
+
+- name: Check if Logical Volume db_lv exists
+  ansible.builtin.command: lvs data_vg/db_lv
+  delegate_to: rhcsa-node1
+  become: yes
+  register: db_lv_check
+  changed_when: false
+  failed_when: false
+
+- name: Create Logical Volume db_lv, Slice a 4GB volume named db_lv out of your data_vg pool
+  ansible.builtin.command: lvcreate -y -n db_lv -L 4G data_vg
+  delegate_to: rhcsa-node1
+  become: yes
+  when: db_lv_check.rc != 0
+
+- name: Verify db_lv Logical Volume
+  ansible.builtin.command: lvdisplay /dev/data_vg/db_lv
+  delegate_to: rhcsa-node1
+  become: yes
+  register: db_lvdisplay_output
+  changed_when: false
+  ignore_errors: yes
+
+- name: Show db_lv verification
+  ansible.builtin.debug:
+    var: db_lvdisplay_output.stdout_lines
+

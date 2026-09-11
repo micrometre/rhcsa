@@ -1,0 +1,38 @@
+---
+# Create and attach the first 10GB disk (vdb) to the VM
+
+- name: Create a 10GB disk named "rhcsa-data1.qcow2"
+  ansible.builtin.command: qemu-img create -f qcow2 rhcsa-data1.qcow2 10G
+  args:
+    chdir: /var/lib/libvirt/images/
+    creates: /var/lib/libvirt/images/rhcsa-data1.qcow2
+  become: yes
+
+- name: Check if disk vdb is already attached
+  ansible.builtin.shell: virsh domblklist rhcsa-node1 | grep -q vdb
+  become: yes
+  register: vdb_check
+  changed_when: false
+  failed_when: false
+
+- name: Attach the disk to rhcsa-node1
+  ansible.builtin.command: >
+    virsh attach-disk rhcsa-node1
+    --source /var/lib/libvirt/images/rhcsa-data1.qcow2
+    --target vdb
+    --persistent
+    --driver qemu
+    --subdriver qcow2
+  become: yes
+  when: vdb_check.rc != 0
+
+- name: List block devices for rhcsa-node1
+  ansible.builtin.command: virsh domblklist rhcsa-node1
+  become: yes
+  register: domblklist_output
+  changed_when: false
+
+- name: Show block devices
+  ansible.builtin.debug:
+    var: domblklist_output.stdout_lines
+

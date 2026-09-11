@@ -1,0 +1,17 @@
+---
+# Initialize /dev/vdc as a physical volume and add it to data_vg
+
+- name: Create a physical volume on /dev/vdc
+  ansible.builtin.command: pvcreate /dev/vdc
+  delegate_to: rhcsa-node1
+  become: yes
+  register: pvcreate_vdc
+  changed_when: "'successfully created' in pvcreate_vdc.stdout"
+
+- name: Extend data_vg to include /dev/vdc
+  ansible.builtin.command: vgextend data_vg /dev/vdc
+  delegate_to: rhcsa-node1
+  become: yes
+  register: vgextend_output
+  changed_when: "'successfully extended' in vgextend_output.stdout"
+

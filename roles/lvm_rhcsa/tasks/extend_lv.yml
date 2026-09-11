@@ -1,0 +1,33 @@
+---
+# Extend db_lv by 1G
+
+- name: Ensure your Volume Group actually has space left to give.
+  ansible.builtin.command: vgs data_vg
+  delegate_to: rhcsa-node1
+  become: yes
+  register: vg_space_check
+  changed_when: false
+
+- name: Show VG space verification
+  ansible.builtin.debug:
+    var: vg_space_check.stdout_lines
+
+- name: Check db_lv current size
+  ansible.builtin.command: lvs --noheadings -o lv_size /dev/data_vg/db_lv
+  delegate_to: rhcsa-node1
+  become: yes
+  register: current_db_lv_size
+  changed_when: false
+
+- name: Extend the Volume and Filesystem Together
+  ansible.builtin.command: lvextend -r -L +1G /dev/mapper/data_vg-db_lv
+  delegate_to: rhcsa-node1
+  become: yes
+  register: lvextend_output
+  changed_when: "'successfully resized' in lvextend_output.stdout"
+  when: "'4.00g' in current_db_lv_size.stdout"
+
+- name: Show LV extend output
+  ansible.builtin.debug:
+    var: lvextend_output.stdout_lines | default('Already extended')
+

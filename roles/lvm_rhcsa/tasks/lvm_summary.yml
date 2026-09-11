@@ -1,0 +1,35 @@
+---
+# Final LVM summary - show all PVs, VGs, LVs and block devices
+
+- name: Gather Physical Volume summary (JSON)
+  ansible.builtin.command: pvs --reportformat json
+  delegate_to: rhcsa-node1
+  become: yes
+  register: pvs_summary
+  changed_when: false
+
+- name: Gather Volume Group summary (JSON)
+  ansible.builtin.command: vgs --reportformat json
+  delegate_to: rhcsa-node1
+  become: yes
+  register: vgs_summary
+  changed_when: false
+
+- name: Gather Logical Volume summary (JSON)
+  ansible.builtin.command: lvs --reportformat json
+  delegate_to: rhcsa-node1
+  become: yes
+  register: lvs_summary
+  changed_when: false
+
+- name: Gather block device tree (JSON)
+  ansible.builtin.command: lsblk -J -o NAME,SIZE,TYPE,FSTYPE,MOUNTPOINTS /dev/vdb
+  delegate_to: rhcsa-node1
+  become: yes
+  register: lsblk_summary
+  changed_when: false
+
+- name: "LVM SETUP SUMMARY"
+  ansible.builtin.debug:
+    msg: "{{ {'block_devices': (lsblk_summary.stdout | from_json).blockdevices, 'physical_volumes': (pvs_summary.stdout | from_json).report[0].pv, 'volume_groups': (vgs_summary.stdout | from_json).report[0].vg, 'logical_volumes': (lvs_summary.stdout | from_json).report[0].lv} | to_nice_json }}"
+

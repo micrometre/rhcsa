@@ -1,0 +1,50 @@
+---
+# Format db_lv with XFS and mount to /mnt/database
+
+- name: Check if db_lv is already formatted
+  ansible.builtin.command: blkid /dev/mapper/data_vg-db_lv
+  delegate_to: rhcsa-node1
+  become: yes
+  register: db_lv_fs_check
+  changed_when: false
+  failed_when: false
+
+- name: Format db_lv with XFS
+  ansible.builtin.command: mkfs.xfs /dev/mapper/data_vg-db_lv
+  delegate_to: rhcsa-node1
+  become: yes
+  when: db_lv_fs_check.rc != 0
+
+- name: Create mount point /mnt/database
+  ansible.builtin.file:
+    path: /mnt/database
+    state: directory
+  delegate_to: rhcsa-node1
+  become: yes
+
+- name: Check if db_lv is already mounted
+  ansible.builtin.shell: mount | grep -q '/mnt/database'
+  delegate_to: rhcsa-node1
+  become: yes
+  register: mount_check
+  changed_when: false
+  failed_when: false
+
+- name: Mount db_lv to /mnt/database
+  ansible.builtin.command: mount /dev/mapper/data_vg-db_lv /mnt/database
+  delegate_to: rhcsa-node1
+  become: yes
+  when: mount_check.rc != 0
+
+- name: Verify the mount
+  ansible.builtin.shell: df -h | grep /mnt/database
+  delegate_to: rhcsa-node1
+  become: yes
+  register: mount_verify
+  changed_when: false
+  failed_when: false
+
+- name: Show mount verification
+  ansible.builtin.debug:
+    var: mount_verify.stdout_lines
+
