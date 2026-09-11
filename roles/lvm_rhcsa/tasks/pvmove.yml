@@ -8,3 +8,13 @@
 - name: Show the output of domblklist
   ansible.builtin.debug:
     var: domblklist_output.stdout_lines
+- name: First, confirm /dev/vdb is actually holding the data and /dev/vdc has enough free space.
+  ansible.builtin.command: pvdisplay
+  delegate_to: rhcsa-node1
+  become: yes
+  register: lsblk_output
+  changed_when: false
+
+- name: Show the output of pvdisplay
+  ansible.builtin.debug:
+    var: lsblk_output.stdout_lines  
