@@ -1,0 +1,84 @@
+---
+# Cleanup tasks for lvm_rhcsa - tears down LVM setup on rhcsa-node1
+
+- name: Check if /mnt/database is mounted
+  ansible.builtin.shell: mount | grep -q '/mnt/database'
+  delegate_to: rhcsa-node1
+  become: yes
+  register: mount_check
+  changed_when: false
+  failed_when: false
+
+- name: Unmount /mnt/database
+  ansible.builtin.command: umount /mnt/database
+  delegate_to: rhcsa-node1
+  become: yes
+  when: mount_check.rc == 0
+
+- name: Remove mount point /mnt/database
+  ansible.builtin.file:
+    path: /mnt/database
+    state: absent
+  delegate_to: rhcsa-node1
+  become: yes
+
+- name: Check if Logical Volume db_lv exists
+  ansible.builtin.command: lvs data_vg/db_lv
+  delegate_to: rhcsa-node1
+  become: yes
+  register: db_lv_check
+  changed_when: false
+  failed_when: false
+
+- name: Remove Logical Volume db_lv
+  ansible.builtin.command: lvremove -f /dev/data_vg/db_lv
+  delegate_to: rhcsa-node1
+  become: yes
+  when: db_lv_check.rc == 0
+
+- name: Check if Logical Volume app_lv exists
+  ansible.builtin.command: lvs data_vg/app_lv
+  delegate_to: rhcsa-node1
+  become: yes
+  register: app_lv_check
+  changed_when: false
+  failed_when: false
+
+- name: Remove Logical Volume app_lv
+  ansible.builtin.command: lvremove -f /dev/data_vg/app_lv
+  delegate_to: rhcsa-node1
+  become: yes
+  when: app_lv_check.rc == 0
+
+- name: Check if Volume Group data_vg exists
+  ansible.builtin.command: vgs data_vg
+  delegate_to: rhcsa-node1
+  become: yes
+  register: vg_check
+  changed_when: false
+  failed_when: false
+
+- name: Remove Volume Group data_vg
+  ansible.builtin.command: vgremove -f data_vg
+  delegate_to: rhcsa-node1
+  become: yes
+  when: vg_check.rc == 0
+
+- name: Check if Physical Volume exists on /dev/vdb
+  ansible.builtin.command: pvs /dev/vdb
+  delegate_to: rhcsa-node1
+  become: yes
+  register: pv_check
+  changed_when: false
+  failed_when: false
+
+- name: Remove Physical Volume /dev/vdb
+  ansible.builtin.command: pvremove /dev/vdb
+  delegate_to: rhcsa-node1
+  become: yes
+  when: pv_check.rc == 0
+
+- name: Show cleanup complete
+  ansible.builtin.debug:
+    msg: "LVM cleanup complete - PV, VG, and all LVs removed from rhcsa-node1"
+

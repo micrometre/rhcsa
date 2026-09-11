@@ -1,4 +1,4 @@
-.PHONY: help configure_virtualization configure_vm_manager create_vms create_rhcsa_node1 create_repo_srv basic_setup nfs_setup dnf_repo_setup create_users vm_status workspace clean clean_all snap_create snap_list snap_list_all snap_delete snap_restore snap_current
+.PHONY: help configure_virtualization configure_vm_manager create_vms create_rhcsa_node1 create_repo_srv basic_setup nfs_setup dnf_repo_setup create_users vm_status workspace clean clean_all snap_create snap_list snap_list_all snap_delete snap_restore snap_current lvm_setup lvm_clean lvm_reconfigure lvm_add_hd
 
 # All VMs managed by this project
 ALL_VMS := rhcsa-node1 repo-srv
@@ -26,6 +26,10 @@ help:
 	@echo "  snap_current           - Show current VM snapshot (VM_NAME required)"
 	@echo "  clean                  - Cleanup a specific VM (default: node1)"
 	@echo "  clean_all              - Remove all VM images and workspace"
+	@echo "  lvm_setup              - Configure LVM and add disk for rhcsa-node1"
+	@echo "  lvm_clean              - Remove LVM setup (unmount, remove LVs, VG, PV)"
+	@echo "  lvm_reconfigure        - Clean and reconfigure LVM from scratch"
+	@echo "  lvm_add_hd             - Create and attach a new 10GB drive (vdc)"
 
 configure_virtualization:
 	@echo "Configuring virtualization on ${HOST_NAME}..."
@@ -83,7 +87,30 @@ lvm_setup:
 	@echo ""
 	@echo "✅ LVM setup completed!"
 
+lvm_clean:
+	@echo "Cleaning up LVM configuration on rhcsa-node1..."
+	ansible-playbook playbooks/configure.yml --tags lvm -e "lvm_action=clean"
+	@echo ""
+	@echo "✅ LVM cleanup completed!"
 
+lvm_reconfigure:
+	@echo "Reconfiguring LVM (clean + setup)..."
+	ansible-playbook playbooks/configure.yml --tags lvm -e "lvm_action=clean"
+	ansible-playbook playbooks/configure.yml --tags lvm
+	@echo ""
+	@echo "✅ LVM reconfigured successfully!"
+
+lvm_add_hd:
+	@echo "Adding new 10GB hard drive (vdc) to rhcsa-node1..."
+	ansible-playbook playbooks/configure.yml --tags lvm -e "lvm_action=add_hd"
+	@echo ""
+	@echo "✅ New hard drive added successfully!"
+
+lvm_pvmove:
+	@echo "Migrating data from vdb to vdc using pvmove..."
+	ansible-playbook playbooks/configure.yml --tags lvm -e "lvm_action=pvmove"
+	@echo ""
+	@echo "✅ Data migration completed successfully!"
 vm_status:
 	@echo "Checking VM status..."
 	ansible-playbook playbooks/configure.yml --tags vm-manager -e "vm_action=status" $(if $(VM_NAME),-e "vm_name=$(VM_NAME)",)

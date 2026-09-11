@@ -1,89 +1,17 @@
 ---
-- name: Install lvm2 (inside the VM)
-  ansible.builtin.package:
-    name: lvm2
-    state: present
-  delegate_to: rhcsa-node1
-  become: yes
+# Main tasks file for lvm_rhcsa
 
-- name: Create a 10GB disk named "rhcsa-data1.qcow2"
-  ansible.builtin.command: qemu-img create -f qcow2 rhcsa-data1.qcow2 10G
-  args:
-    chdir: /var/lib/libvirt/images/
-    creates: /var/lib/libvirt/images/rhcsa-data1.qcow2
-  become: yes
+- name: Clean up LVM configuration
+  include_tasks: cleanup.yml
+  when: lvm_action | default('configure') == 'clean'
 
-- name: Attach the disk to rhcsa-node1
-  ansible.builtin.command: >
-    virsh attach-disk rhcsa-node1
-    --source /var/lib/libvirt/images/rhcsa-data1.qcow2
-    --target vdb
-    --persistent
-    --driver qemu
-    --subdriver qcow2
-  become: yes
-  ignore_errors: yes
+- name: Install and configure LVM
+  include_tasks: configure.yml
+  when: lvm_action | default('configure') == 'configure'
 
-- name: List block devices for rhcsa-node1
-  ansible.builtin.command: virsh domblklist rhcsa-node1
-  become: yes
-  register: domblklist_output
-  changed_when: false
-
-- name: Show block devices
-  ansible.builtin.debug:
-    var: domblklist_output.stdout_lines
-
-- name: Create Physical Volume on /dev/vdb (inside the VM)
-  ansible.builtin.command: pvcreate /dev/vdb
-  delegate_to: rhcsa-node1
-  become: yes
-  ignore_errors: yes
-
-- name: Verify Physical Volume
-  ansible.builtin.command: pvdisplay /dev/vdb
-  delegate_to: rhcsa-node1
-  become: yes
-  register: pvdisplay_output
-  changed_when: false
-  ignore_errors: yes
-
-- name: Show PV verification
-  ansible.builtin.debug:
-    var: pvdisplay_output.stdout_lines
-
-- name: Create Volume Group data_vg
-  ansible.builtin.command: vgcreate data_vg /dev/vdb
-  delegate_to: rhcsa-node1
-  become: yes
-  ignore_errors: yes
-
-- name: Verify Volume Group
-  ansible.builtin.command: vgdisplay data_vg
-  delegate_to: rhcsa-node1
-  become: yes
-  register: vgdisplay_output
-  changed_when: false
-  ignore_errors: yes
-
-- name: Show VG verification
-  ansible.builtin.debug:
-    var: vgdisplay_output.stdout_lines
-
-- name: Create Logical Volume app_lv
-  ansible.builtin.command: lvcreate -n app_lv -L 4G data_vg
-  delegate_to: rhcsa-node1
-  become: yes
-  ignore_errors: yes
-
-- name: Verify Logical Volume
-  ansible.builtin.command: lvdisplay /dev/data_vg/app_lv
-  delegate_to: rhcsa-node1
-  become: yes
-  register: lvdisplay_output
-  changed_when: false
-  ignore_errors: yes
-
-- name: Show LV verification
-  ansible.builtin.debug:
-    var: lvdisplay_output.stdout_lines
+- name: Add a brand new physical drive to expand the pool  
+  include_tasks: add_hd.yml
+  when: lvm_action | default('configure') == 'add_hd'
+- name: use pvmove to migrate all data off vdb and onto vdc with zero downtime
+  include_tasks: pvmove.yml
+  when: lvm_action | default('configure') == 'pvmove'

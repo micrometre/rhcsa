@@ -1,0 +1,10 @@
+
+- name: List block devices for rhcsa-node1
+  ansible.builtin.command: virsh domblklist rhcsa-node1
+  become: yes
+  register: domblklist_output
+  changed_when: false
+
+- name: Show the output of domblklist
+  ansible.builtin.debug:
+    var: domblklist_output.stdout_lines

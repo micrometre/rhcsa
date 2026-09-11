@@ -7,8 +7,8 @@ An Ansible role to configure LVM and add secondary disks to the RHCSA training n
 This role performs the following tasks to set up Logical Volume Management (LVM):
 
 1. **Install lvm2**: Installs the `lvm2` package on the target VM.
-2. **Create Disk Image**: Creates a new 10GB qcow2 disk image (`rhcsa-data1.qcow2`) in the libvirt images directory.
-3. **Attach Disk**: Attaches the new disk to the `rhcsa-node1` VM as the `vdb` block device.
+2. **Create Disk Images**: Creates new 10GB qcow2 disk images (`rhcsa-data1.qcow2` and `rhcsa-data2.qcow2`) in the libvirt images directory.
+3. **Attach Disks**: Attaches the new disks to the `rhcsa-node1` VM as the `vdb` and `vdc` block devices.
 4. **Verify Attachment**: Lists the block devices for `rhcsa-node1` to confirm the disk is attached.
 5. **Create Physical Volume (PV)**: Initializes `/dev/vdb` as a physical volume.
 6. **Verify PV**: Displays physical volume details to confirm creation.
@@ -22,13 +22,21 @@ This role performs the following tasks to set up Logical Volume Management (LVM)
 ### Disk Creation & Attachment (run on host)
 
 ```bash
-# Create a 10GB qcow2 disk image
+# Create 10GB qcow2 disk images
 sudo qemu-img create -f qcow2 /var/lib/libvirt/images/rhcsa-data1.qcow2 10G
+sudo qemu-img create -f qcow2 /var/lib/libvirt/images/rhcsa-data2.qcow2 10G
 
-# Attach the disk to the VM
+# Attach the disks to the VM
 sudo virsh attach-disk rhcsa-node1 \
   --source /var/lib/libvirt/images/rhcsa-data1.qcow2 \
   --target vdb \
+  --persistent \
+  --driver qemu \
+  --subdriver qcow2
+
+sudo virsh attach-disk rhcsa-node1 \
+  --source /var/lib/libvirt/images/rhcsa-data2.qcow2 \
+  --target vdc \
   --persistent \
   --driver qemu \
   --subdriver qcow2
