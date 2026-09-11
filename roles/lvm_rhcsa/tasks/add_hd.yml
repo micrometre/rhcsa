@@ -36,3 +36,17 @@
 - name: Show the output of domblklist
   ansible.builtin.debug:
     var: domblklist_output.stdout_lines
+
+- name: Create a physical volume on /dev/vdc
+  ansible.builtin.command: pvcreate /dev/vdc
+  delegate_to: rhcsa-node1
+  become: yes
+  register: pvcreate_vdc
+  changed_when: "'successfully created' in pvcreate_vdc.stdout"
+
+- name: Extend data_vg to include /dev/vdc
+  ansible.builtin.command: vgextend data_vg /dev/vdc
+  delegate_to: rhcsa-node1
+  become: yes
+  register: vgextend_output
+  changed_when: "'successfully extended' in vgextend_output.stdout"

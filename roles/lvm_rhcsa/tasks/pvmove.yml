@@ -12,9 +12,21 @@
   ansible.builtin.command: pvdisplay
   delegate_to: rhcsa-node1
   become: yes
-  register: lsblk_output
+  register: pvdisplay_output
   changed_when: false
 
 - name: Show the output of pvdisplay
   ansible.builtin.debug:
-    var: lsblk_output.stdout_lines  
+    var: pvdisplay_output.stdout_lines  
+
+
+- name: Use pvmove to migrate all data off /dev/vdb and onto /dev/vdc with zero downtime
+  ansible.builtin.command: pvmove /dev/vdb /dev/vdc
+  delegate_to: rhcsa-node1
+  become: yes
+  register: pvmove_output
+  changed_when: false  
+
+- name: Show the output of pvmove
+  ansible.builtin.debug:
+    var: pvmove_output.stdout_lines   
